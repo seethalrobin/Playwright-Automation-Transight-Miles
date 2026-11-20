@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+allure-results/
+allure-report/
+*.zip
+*.webm
+trace*.zip
+
+# Secrets / sessions — NEVER commit
+.env
+.env.*
+!.env.example
+.auth/
+**/storageState*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Claude Code local settings
+.claude/settings.local.json
