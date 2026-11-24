@@ -78,6 +78,30 @@ export class FleetOwnerEditPage {
     await expect(this.page.getByText('XTRAPOWER Customer Registration')).toBeVisible();
   }
 
+  /**
+   * Where the IOCL setup stands for this fleet owner (call after openFuelAccountStep):
+   *   'notStarted' – customer form not sent yet
+   *   'formSent'   – IOCL step 1 done, fuel account not created yet
+   *   'active'     – fuel account already exists
+   */
+  async fuelAccountState(): Promise<'notStarted' | 'formSent' | 'active'> {
+    const active = this.page.getByText('XTRAPOWER Fuel Account Active');
+    const formSent = this.page.getByText('Documents received');
+    const notStarted = this.page.getByRole('button', { name: 'Upload to IOCL' });
+    await expect(active.or(formSent).or(notStarted).first()).toBeVisible();
+    if (await active.isVisible()) return 'active';
+    if (await formSent.isVisible()) return 'formSent';
+    return 'notStarted';
+  }
+
+  /** "IndianOil Customer ID" shown once the fuel account is active. */
+  async readCustomerId(): Promise<string> {
+    return (await this.page
+      .locator('xpath=//*[normalize-space(.)="IndianOil Customer ID"]/following-sibling::*[1]')
+      .first()
+      .innerText()).trim();
+  }
+
   /** IOCL step 1 – send the customer form (single file) to IndianOil. */
   async sendCustomerForm(file: string, adminPassword: string) {
     await this.page.locator('#iocl-form-file').setInputFiles(file);
@@ -123,10 +147,7 @@ export class FleetOwnerEditPage {
     expect(response.ok(), `IOCL create account returned ${response.status()}: ${await response.text().catch(() => '')}`).toBeTruthy();
 
     await expect(this.page.getByText('XTRAPOWER Fuel Account Active')).toBeVisible({ timeout: 30000 });
-    const customerId = (await this.page
-      .locator('xpath=//*[normalize-space(.)="IndianOil Customer ID"]/following-sibling::*[1]')
-      .first()
-      .innerText()).trim();
+    const customerId = await this.readCustomerId();
     await watchPause(this.page);
     return customerId;
   }

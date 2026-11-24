@@ -111,6 +111,43 @@ export class FleetOwnersPage {
     await watchPause(this.page);
   }
 
+  /** Directory rows whose KYC status is "Approved". */
+  private approvedRowLocator(): Locator {
+    return this.page.locator('tbody tr').filter({ hasText: /Approved/i });
+  }
+
+  private async waitForDirectory() {
+    await this.goto();
+    const rows = this.page.locator('tbody tr');
+    await expect(rows.first()).toBeVisible({ timeout: 15000 });
+    await expect(rows.first()).not.toContainText(/Loading/i, { timeout: 15000 });
+    await expect(this.page.getByText(/Failed to load/i)).toHaveCount(0);
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+  }
+
+  /**
+   * KYC-approved fleet owners on the directory's first page, automation-created
+   * ("PW Auto …") owners first. `index` is the position among approved rows.
+   */
+  async approvedOwners(): Promise<{ index: number; name: string }[]> {
+    await this.waitForDirectory();
+    const rows = await this.approvedRowLocator().all();
+    const owners = await Promise.all(rows.map(async (row, index) => ({
+      index,
+      name: (await row.locator('td').nth(1).innerText()).split('\n')[0].trim(),
+    })));
+    const isAuto = (n: string) => /^PW Auto/i.test(n);
+    return owners.sort((a, b) => Number(isAuto(b.name)) - Number(isAuto(a.name)));
+  }
+
+  /** Opens the detail page of the approved owner at `index` (from approvedOwners()). */
+  async openApprovedOwner(index: number) {
+    await this.waitForDirectory();
+    await this.approvedRowLocator().nth(index).locator('td').nth(1).click();
+    await expect(this.page.getByRole('button', { name: 'Edit Details' })).toBeVisible();
+    await watchPause(this.page);
+  }
+
   /** Submits the wizard. Returns the API response of the create call. */
   async completeOnboarding() {
     const response = waitForCreateResponse(this.page, /fleet/i);

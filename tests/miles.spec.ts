@@ -103,7 +103,8 @@ test.describe('Vehicles', () => {
       await expect(page.getByRole('columnheader', { name: col })).toBeVisible();
     }
   });
-
+       
+   
   // NOTE: registers a REAL vehicle on staging, linked to a "PW Auto Logistics" test fleet owner.
   test('admin can register a new vehicle', async ({ page }) => {
     const data = newVehicle();
@@ -378,6 +379,48 @@ test.describe('Fuel Card Issue (IOCL sandbox)', { tag: '@iocl' }, () => {
 
     console.log(`Fuel card issued for ${owner.businessName} / vehicle ${vehicle.registrationNumber}`);
   });
+
+  // Creates the IOCL fuel account for an EXISTING, KYC-approved fleet owner.
+  // Picks the owner automatically: the first approved owner ("PW Auto …" first) whose
+  // fuel account is not active yet. Skips step 1 if that owner's form was already sent.
+  //   npx playwright test -g "approved fleet owner" --project=chromium
+  test('create IOCL fuel account for an approved fleet owner', async ({ page }) => {
+    test.setTimeout(Number(process.env.SLOW_MO) ? 900_000 : 600_000); // owner search + up to 2 IndianOil calls
+    const MAX_OWNERS_TO_CHECK = 10;
+
+    const kyc = newFleetOwnerKyc(); // only address / incorporation date / form file are used
+    const fleetOwners = new FleetOwnersPage(page);
+    const editOwner = new FleetOwnerEditPage(page);
+    let ownerName = '';
+    let state = 'active' as 'notStarted' | 'formSent' | 'active'; // `as`: set inside the step callback below
+
+    await test.step('1. Find an approved fleet owner without a fuel account', async () => {
+      const candidates = await fleetOwners.approvedOwners();
+      expect(candidates.length, 'KYC-approved fleet owners in the directory').toBeGreaterThan(0);
+      for (const candidate of candidates.slice(0, MAX_OWNERS_TO_CHECK)) {
+        await fleetOwners.openApprovedOwner(candidate.index);
+        await editOwner.openFuelAccountStep();
+        state = await editOwner.fuelAccountState();
+        if (state !== 'active') {
+          ownerName = candidate.name;
+          return;
+        }
+      }
+    });
+    test.skip(!ownerName, `All approved fleet owners checked (max ${MAX_OWNERS_TO_CHECK}) already have an IOCL fuel account`);
+    test.info().annotations.push({ type: 'fleet owner', description: `${ownerName} (${state})` });
+
+    if (state === 'notStarted') {
+      await test.step('2. IOCL step 1 – send customer form to IndianOil', () =>
+        editOwner.sendCustomerForm(kyc.customerFormFile, ADMIN_PASSWORD));
+    }
+
+    await test.step('3. IOCL step 2 – create fuel account', async () => {
+      const customerId = await editOwner.createFuelAccount(kyc, ADMIN_PASSWORD);
+      expect(customerId, 'IndianOil Customer ID').toMatch(/\d{6,}/);
+      console.log(`IOCL customer ID for ${ownerName}: ${customerId}`);
+    });
+  });
 });
 
 // ═════════════════════════════════════════════════════════════
@@ -490,6 +533,7 @@ loggedOutTest.describe('Login', { tag: '@login' }, () => {
     loginPage = new LoginPage(page);
     await loginPage.goto();
   });
+
 
   loggedOutTest('shows all login page elements', async () => {
     await expect(loginPage.usernameInput).toBeVisible();
