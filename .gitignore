@@ -24,6 +24,10 @@ trace*.zip
 *.p12
 *.pfx
 
+# JMeter output
+jmeter/results/
+*.jtl
+
 # Logs
 *.log
 npm-debug.log*
